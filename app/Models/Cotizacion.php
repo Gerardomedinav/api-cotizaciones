@@ -6,6 +6,9 @@ use Illuminate\Database\Eloquent\Model;
 
 class Cotizacion extends Model
 {
-    protected $table = 'cotizaciones'; // 👈 Forzar nombre correcto
-    protected $fillable = ['isoCode', 'compra', 'venta', 'fecha'];
+    protected $table = 'cotizaciones'; 
+    protected $fillable = [
+        'moneda', 'compra', 'venta', 'fecha', 'hora', 'tendencia'
+    ];
+
 }
