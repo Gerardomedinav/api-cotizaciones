@@ -28,5 +28,11 @@ class Kernel extends ConsoleKernel
             ->everyMinute()
             ->weekdays()
             ->between('08:30', '18:00');
+               // Ejecutar cada hora (puede ser cada 15 min si quieres más frecuencia)
+    $schedule->command('promedios:calcular')
+        ->everyHour()
+        ->between('08:00', '18:00') // Solo en horario laboral
+        ->weekdays(); // Solo lunes a viernes
     }
+    
 }
