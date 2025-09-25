@@ -9,27 +9,35 @@ use App\Models\Cotizacion;
 class ActualizarCotizaciones extends Command
 {
     protected $signature = 'cotizaciones:actualizar';
-    protected $description = 'Consulta la API de Cambios Chaco y guarda cotizaciones minuto a minuto si hay cambios';
+    protected $description = 'Consulta la API de Cambios Chaco y guarda cotizaciones solo si hay cambios';
 
     public function handle()
     {
         $url = config('services.cambioschaco.url');
-        $response = Http::get($url);
+        $response = Http::timeout(15)->get($url);
 
         if ($response->failed()) {
-            $this->error('❌ Error al consultar la API');
+            $this->error("❌ Error al consultar la API: {$response->status()}");
             return 1;
         }
 
         $data = $response->json();
         $items = $data['items'] ?? $data['cotizaciones'] ?? [];
 
-        foreach ($items as $item) {
-            $nuevaCompra = round($item['purchasePrice'], 2);
-            $nuevaVenta  = round($item['salePrice'], 2);
+        if (empty($items)) {
+            $this->warn('⚠️ No se encontraron cotizaciones en la respuesta');
+            return 1;
+        }
 
-            // Última cotización registrada hoy para esa moneda
-            $ultima = Cotizacion::where('moneda', $item['isoCode'])
+        foreach ($items as $item) {
+            $moneda = $item['isoCode'] ?? null;
+            $nuevaCompra = round($item['purchasePrice'] ?? 0, 2);
+            $nuevaVenta  = round($item['salePrice'] ?? 0, 2);
+
+            if (!$moneda) continue;
+
+            // Última cotización de HOY para esta moneda
+            $ultima = Cotizacion::where('moneda', $moneda)
                 ->whereDate('fecha', now()->toDateString())
                 ->latest('hora')
                 ->first();
@@ -43,23 +51,24 @@ class ActualizarCotizaciones extends Command
                 }
             }
 
-            // Solo guardar si hubo cambio
+            // Solo guardar si hay cambios
             if (!$ultima || $ultima->compra != $nuevaCompra || $ultima->venta != $nuevaVenta) {
                 Cotizacion::create([
-                    'moneda'    => $item['isoCode'],
+                    'moneda'    => $moneda,
                     'compra'    => $nuevaCompra,
                     'venta'     => $nuevaVenta,
                     'fecha'     => now()->toDateString(),
-                    'hora'      => now()->toTimeString(),
+                    'hora'      => now()->toTimeString('H:i:s'), // Formato limpio
                     'tendencia' => $tendencia,
                 ]);
 
-                $this->info("✅ {$item['isoCode']} guardado ({$tendencia}) Compra={$nuevaCompra} Venta={$nuevaVenta}");
+                $this->info("✅ {$moneda} guardado ({$tendencia}) → C: {$nuevaCompra} | V: {$nuevaVenta}");
             } else {
-                $this->line("⏩ {$item['isoCode']} sin cambios");
+                $this->line("⏩ {$moneda} sin cambios");
             }
         }
 
+        $this->info('✅ Actualización completada');
         return 0;
     }
 }
